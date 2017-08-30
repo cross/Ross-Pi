@@ -59,6 +59,7 @@ parser.add_argument('-F', dest='format', action='store_const',
 		    help='temperature in Fahrenheit (default: Celsius)')
 parser.add_argument('-c', '--carbon', action='store',
 		    help='specify the name (and port) of a carbon server to push results to')
+parser.add_argument('-t', dest='delay', type=int, help='Sets the wait time to wait in between readings.')
 parser.add_argument('sensor', type=str, choices=['11', '22', '2302'],
 		    help='type of sensor')
 parser.add_argument('pin', type=int, choices=range(1, 31), metavar='<1-31>',
@@ -82,45 +83,51 @@ if args.carbon:
 
 # Try to grab a sensor reading.  Use the read_retry method which will retry up
 # to 15 times to get a sensor reading (waiting 2 seconds between each retry).
-humidity, temperature = (None, None)
-try:
-    humidity, temperature = Adafruit_DHT.read_retry(sensor_vals[args.sensor], args.pin)
-except RuntimeError as e:
-    if os.geteuid() > 0:
-        print("RuntimeError (%s): Perhaps you need to be root?" % e)
-    else:
-        print("RuntimeError (%s)" % e)
-    sys.exit(2)
-except ValueError as e:
-    print("ValueError: %s" % e)
-    sys.exit(3)
-except Exception as e:
-    print(e)
-    sys.exit(4)
-
-temperatureF = temperature * 9/5.0 + 32
-
-# Note that sometimes you won't get a reading and
-# the results will be null (because Linux can't
-# guarantee the timing of calls to read the sensor).
-# If this happens try again!
-if humidity is not None and temperature is not None:
-    if args.format == 'F':
-	print('Temp={0:0.1f}°F  Humidity={1:0.1f}%'.format(temperatureF, humidity))
-    else:
-	print('Temp={0:0.1f}°C  Humidity={1:0.1f}%'.format(temperature, humidity))
-    # XXX Support other temperature formats?  (Kelvin)
-else:
-    print('Failed to get reading. Try again!')
-    sys.exit(1)
-
-if args.carbon:
+while 1:
+    humidity, temperature = (None, None)
     try:
-        now = int(time.time())
-	s.sendall("distal.environmental.office.temperature %f %d\n" % (temperature,now))
-	s.sendall("distal.environmental.office.humidity %f %d\n" % (humidity,now))
-	s.close()
-	print("Sent records and closed socket.")
+	humidity, temperature = Adafruit_DHT.read_retry(sensor_vals[args.sensor], args.pin)
+    except RuntimeError as e:
+	if os.geteuid() > 0:
+	    print("RuntimeError (%s): Perhaps you need to be root?" % e)
+	else:
+	    print("RuntimeError (%s)" % e)
+	sys.exit(2)
+    except ValueError as e:
+	print("ValueError: %s" % e)
+	sys.exit(3)
     except Exception as e:
-	print("%s: %s" % (type(e).__name__,e))
+	print(e)
+	sys.exit(4)
+
+    temperatureF = temperature * 9/5.0 + 32
+
+    # Note that sometimes you won't get a reading and
+    # the results will be null (because Linux can't
+    # guarantee the timing of calls to read the sensor).
+    # If this happens try again!
+    if humidity is not None and temperature is not None:
+	if args.format == 'F':
+	    print('Temp={0:0.1f}°F  Humidity={1:0.1f}%'.format(temperatureF, humidity))
+	else:
+	    print('Temp={0:0.1f}°C  Humidity={1:0.1f}%'.format(temperature, humidity))
+    else:
+	print('Failed to get reading. Try again!')
+	sys.exit(1)
+
+    if args.carbon:
+	try:
+	    now = int(time.time())
+	    s.sendall("distal.environmental.office.temperature %f %d\n" % (temperature,now))
+	    s.sendall("distal.environmental.office.humidity %f %d\n" % (humidity,now))
+	    s.close()
+	    print("Sent records and closed socket.")
+	except Exception as e:
+	    print("%s: %s" % (type(e).__name__,e))
+
+    # Repeat if loop delay was specified, otherwise exit.
+    if args.delay:
+	time.sleep(args.delay)
+    else:
+	break
 
