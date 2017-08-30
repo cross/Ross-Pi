@@ -70,20 +70,21 @@ sensor_vals = { '11': Adafruit_DHT.DHT11,
                 '2302': Adafruit_DHT.AM2302 }
 
 args = parser.parse_args()
-# If given a carbon server, try the connect before trying to read a temp.
-if args.carbon:
-    try:
-	s = carbon_socket(args.carbon)
-    except ValueError as e:
-	print("Improper carbon server argument: %s" % args.carbon)
-	sys.exit(4)
-    except Exception as e:
-	print("%s: %s" % (type(e).__name__,e))
-	sys.exit(5)
 
 # Try to grab a sensor reading.  Use the read_retry method which will retry up
 # to 15 times to get a sensor reading (waiting 2 seconds between each retry).
 while 1:
+    # If given a carbon server, try the connect before trying to read a temp.
+    if args.carbon:
+	try:
+	    s = carbon_socket(args.carbon)
+	except ValueError as e:
+	    print("Improper carbon server argument: %s" % args.carbon)
+	    sys.exit(4)
+	except Exception as e:
+	    print("%s: %s" % (type(e).__name__,e))
+	    sys.exit(5)
+
     humidity, temperature = (None, None)
     try:
 	humidity, temperature = Adafruit_DHT.read_retry(sensor_vals[args.sensor], args.pin)
