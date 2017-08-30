@@ -1,5 +1,5 @@
 #!/usr/bin/python
-# vim: set fileencoding=utf-8 :
+# vim: set fileencoding=utf-8 sts=4 sw=4 :
 #
 # Based on AdafruitDHT.py
 # Copyright (c) 2014 Adafruit Industries
@@ -25,15 +25,40 @@
 
 import sys
 import os
+import socket
+import time
 import argparse
+from urlparse import urlparse
 
 import Adafruit_DHT
+
+CARBON_PORT = 2003
+
+# Utility methods
+def carbon_socket(server):
+    """Given a host or host:port string, return a socket connected to that
+    specified host and port.  (Default port is the carbon norm, 2003.)"""
+#    print "carbon_socket(%s)" % (server,)
+    spec = urlparse('//%s' % (server,))
+#    print "Got address '%s' and port '%s'" % (spec.hostname,spec.port)
+    sock = socket.socket()
+    if spec.port:
+	port = spec.port
+    else:
+	port = CARBON_PORT
+    print "Establishing connection to %s:%s" % (spec.hostname,port)
+    sock.connect((spec.hostname, port))
+    return sock
+
+
 
 # Parse command line parameters.
 parser = argparse.ArgumentParser(description='Report and/or submit temperature and humidity.')
 parser.add_argument('-F', dest='format', action='store_const',
 		    const='F', default='C',
 		    help='temperature in Fahrenheit (default: Celsius)')
+parser.add_argument('-c', '--carbon', action='store',
+		    help='specify the name (and port) of a carbon server to push results to')
 parser.add_argument('sensor', type=str, choices=['11', '22', '2302'],
 		    help='type of sensor')
 parser.add_argument('pin', type=int, choices=range(1, 31), metavar='<1-31>',
@@ -44,6 +69,16 @@ sensor_vals = { '11': Adafruit_DHT.DHT11,
                 '2302': Adafruit_DHT.AM2302 }
 
 args = parser.parse_args()
+# If given a carbon server, try the connect before trying to read a temp.
+if args.carbon:
+    try:
+	s = carbon_socket(args.carbon)
+    except ValueError as e:
+	print("Improper carbon server argument: %s" % args.carbon)
+	sys.exit(4)
+    except Exception as e:
+	print("%s: %s" % (type(e).__name__,e))
+	sys.exit(5)
 
 # Try to grab a sensor reading.  Use the read_retry method which will retry up
 # to 15 times to get a sensor reading (waiting 2 seconds between each retry).
@@ -74,6 +109,18 @@ if humidity is not None and temperature is not None:
 	print('Temp={0:0.1f}°F  Humidity={1:0.1f}%'.format(temperatureF, humidity))
     else:
 	print('Temp={0:0.1f}°C  Humidity={1:0.1f}%'.format(temperature, humidity))
+    # XXX Support other temperature formats?  (Kelvin)
 else:
     print('Failed to get reading. Try again!')
     sys.exit(1)
+
+if args.carbon:
+    try:
+        now = int(time.time())
+	s.sendall("distal.environmental.office.temperature %f %d\n" % (temperature,now))
+	s.sendall("distal.environmental.office.humidity %f %d\n" % (humidity,now))
+	s.close()
+	print("Sent records and closed socket.")
+    except Exception as e:
+	print("%s: %s" % (type(e).__name__,e))
+
