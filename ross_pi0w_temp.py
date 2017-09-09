@@ -64,6 +64,7 @@ parser.add_argument('sensor', type=str, choices=['11', '22', '2302'],
 		    help='type of sensor')
 parser.add_argument('pin', type=int, choices=range(1, 31), metavar='<1-31>',
 		    help='GPIO PIM number')
+parser.add_argument('-r', dest='room', type=str, help='Requests what room the Pi is in.')
 
 sensor_vals = { '11': Adafruit_DHT.DHT11,
                 '22': Adafruit_DHT.DHT22,
@@ -119,8 +120,8 @@ while 1:
     if args.carbon:
 	try:
 	    now = int(time.time())
-	    s.sendall("distal.environmental.office.temperature %f %d\n" % (temperature,now))
-	    s.sendall("distal.environmental.office.humidity %f %d\n" % (humidity,now))
+	    s.sendall("distal.environmental.%s.temperature %f %d\n" % (args.room, temperature,now))
+	    s.sendall("distal.environmental.%s.humidity %f %d\n" % (args.room, humidity,now))
 	    s.close()
 	    print("Sent records and closed socket.")
 	except Exception as e:
